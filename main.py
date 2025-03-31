@@ -26,7 +26,7 @@ if response.status_code == 200:
 
     # Save compressed image
      # Define the output file path  
-    output_dir="./compressed_image"
+    output_dir="../OneDrive/Desktop"
     # output_dir = "../OneDrive/Desktop"
     os.makedirs(output_dir, exist_ok=True)
 
