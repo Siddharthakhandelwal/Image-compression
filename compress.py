@@ -12,13 +12,13 @@ import uvicorn
 app = FastAPI(title="Image Compression API")
 
 class ImageData(BaseModel):
-    image: Optional[list] = None  # 3D List (NumPy array)
-    image_base64: Optional[str] = None  # Base64 string
-    raw_format: Optional[str] = None  # RAW format (e.g., cr2, dng)
-    target_size_kb: Optional[float] = None  # Target size in KB
-    target_reduction: Optional[float] = None  # Reduction percentage (0-100)
-    quality: Optional[int] = 80  # JPEG/WEBP quality (1-100)
-    format: Optional[str] = "jpeg"  # Output format
+    image: Optional[list] = None  
+    image_base64: Optional[str] = None  
+    raw_format: Optional[str] = None 
+    target_size_kb: Optional[float] = None 
+    target_reduction: Optional[float] = None  
+    quality: Optional[int] = 80 
+    format: Optional[str] = "jpeg" 
 
 @app.post("/compress/")
 async def compress_image(data: ImageData):

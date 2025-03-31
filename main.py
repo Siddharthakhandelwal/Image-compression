@@ -3,9 +3,9 @@ import numpy as np
 import base64
 from PIL import Image
 import io
-
+import os 
 # Load image
-image_path = "WhatsApp Image 2025-03-27 at 10.22.33_1ae424aa.tiff"  # Change to your image file
+image_path =input("enter image path:")  # Change to your image file
 with open(image_path, "rb") as img_file:
     image_bytes = img_file.read()
 
@@ -25,7 +25,14 @@ if response.status_code == 200:
     print(f"Compression ratio: {response.headers.get('X-Compression-Ratio')}x")
 
     # Save compressed image
-    with open("compressed.jpg", "wb") as f:
+     # Define the output file path  
+    output_dir = 'compressed_images'
+    os.makedirs(output_dir, exist_ok=True)
+
+   
+    file_name = "compressed.jpg"
+    output_path = os.path.join(output_dir,file_name)
+    with open(output_path, "wb") as f:
         f.write(response.content)
 else:
     print(f"Error: {response.json()}")
