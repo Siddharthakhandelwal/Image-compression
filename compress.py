@@ -1,121 +1,89 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import Response
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 import numpy as np
 import cv2
 import io
-from typing import List, Optional, Union
+import base64
+import rawpy
+import tifffile
+from typing import Optional
 import uvicorn
 
 app = FastAPI(title="Image Compression API")
 
 class ImageData(BaseModel):
-    image: List[List[List[int]]]
+    image: Optional[list] = None  # 3D List (NumPy array)
+    image_base64: Optional[str] = None  # Base64 string
+    raw_format: Optional[str] = None  # RAW format (e.g., cr2, dng)
     target_size_kb: Optional[float] = None  # Target size in KB
-    target_reduction: Optional[float] = None  # Target reduction percentage (0-100)
-    quality: Optional[int] = 80  # Initial quality if using target approach
-    format: Optional[str] = "jpeg"
+    target_reduction: Optional[float] = None  # Reduction percentage (0-100)
+    quality: Optional[int] = 80  # JPEG/WEBP quality (1-100)
+    format: Optional[str] = "jpeg"  # Output format
 
 @app.post("/compress/")
 async def compress_image(data: ImageData):
     try:
-        # Convert list to numpy array
-        image_array = np.array(data.image, dtype=np.uint8)
+        image_array = None
         
-        # Check if valid image dimensions
-        if len(image_array.shape) < 2 or len(image_array.shape) > 3:
+        # Handle direct NumPy array input
+        if data.image is not None:
+            image_array = np.array(data.image, dtype=np.uint8)
+        
+        # Handle Base64 input
+        elif data.image_base64 is not None:
+            binary_data = base64.b64decode(data.image_base64)
+            
+            # Handle RAW images
+            if data.raw_format and data.raw_format.lower() in ['cr2', 'nef', 'arw', 'dng', 'raw']:
+                with rawpy.imread(io.BytesIO(binary_data)) as raw:
+                    image_array = raw.postprocess()
+            
+            # Handle TIFF images
+            elif data.raw_format and data.raw_format.lower() in ['tif', 'tiff']:
+                image_array = tifffile.imread(io.BytesIO(binary_data))
+                image_array = (image_array / 65535 * 255).astype(np.uint8) if image_array.max() > 255 else image_array.astype(np.uint8)
+            
+            else:
+                image_array = cv2.imdecode(np.frombuffer(binary_data, np.uint8), cv2.IMREAD_UNCHANGED)
+        
+        if image_array is None or image_array.ndim not in [2, 3]:
             raise HTTPException(status_code=400, detail="Invalid image dimensions. Expected 2D or 3D array.")
         
-        # Validate format
-        if data.format.lower() not in ["jpeg", "jpg", "png", "webp"]:
-            raise HTTPException(status_code=400, detail="Unsupported format. Use 'jpeg', 'png', or 'webp'.")
-            
-        # Get original image size in bytes
-        original_size = image_array.nbytes
-        
-        # Determine target size if specified
-        target_size = None
-        if data.target_size_kb is not None:
-            target_size = int(data.target_size_kb * 1024)  # Convert KB to bytes
-        elif data.target_reduction is not None:
-            if not 0 <= data.target_reduction <= 100:
-                raise HTTPException(status_code=400, detail="Target reduction must be between 0 and 100 percent")
-            target_size = int(original_size * (1 - data.target_reduction/100))
+        original_size = image_array.nbytes  # Original size in bytes
+        target_size = int(data.target_size_kb * 1024) if data.target_size_kb else None
         
         # Set initial quality
         quality = max(1, min(100, data.quality))
         
-        # If target size is specified, use binary search to find appropriate quality
-        if target_size is not None:
-            min_q = 1
-            max_q = 100
-            best_quality = quality
-            best_diff = float('inf')
-            best_result = None
-            
-            for _ in range(10):  # Max 10 iterations for binary search
-                # Encode with current quality
-                if data.format.lower() in ["jpeg", "jpg"]:
-                    _, encoded_img = cv2.imencode('.jpg', image_array, [cv2.IMWRITE_JPEG_QUALITY, quality])
-                elif data.format.lower() == "png":
-                    _, encoded_img = cv2.imencode('.png', image_array, [cv2.IMWRITE_PNG_COMPRESSION, min(9, quality // 10)])
-                elif data.format.lower() == "webp":
-                    _, encoded_img = cv2.imencode('.webp', image_array, [cv2.IMWRITE_WEBP_QUALITY, quality])
-                
-                # Get current size
-                current_size = len(encoded_img.tobytes())
-                diff = abs(current_size - target_size)
-                
-                # Check if this is closer to target
-                if diff < best_diff:
-                    best_diff = diff
-                    best_quality = quality
-                    best_result = encoded_img
-                
-                # If close enough or can't improve further, break
-                if diff <= 1024 or max_q - min_q <= 1:  # Within 1KB or can't narrow further
-                    break
-                
-                # Adjust quality based on current size
-                if current_size > target_size:
-                    max_q = quality
-                    quality = (min_q + quality) // 2
-                else:
-                    min_q = quality
-                    quality = (max_q + quality) // 2
-            
-            # Use the best quality we found
-            quality = best_quality
-            encoded_img = best_result
-        else:
-            # Simple quality-based compression
-            if data.format.lower() in ["jpeg", "jpg"]:
-                _, encoded_img = cv2.imencode('.jpg', image_array, [cv2.IMWRITE_JPEG_QUALITY, quality])
-                content_type = "image/jpeg"
-            elif data.format.lower() == "png":
-                _, encoded_img = cv2.imencode('.png', image_array, [cv2.IMWRITE_PNG_COMPRESSION, min(9, quality // 10)])
-                content_type = "image/png"
-            elif data.format.lower() == "webp":
-                _, encoded_img = cv2.imencode('.webp', image_array, [cv2.IMWRITE_WEBP_QUALITY, quality])
-                content_type = "image/webp"
-        
-        # Set content type based on format
+        # Encode with specified format
+        encode_params = []
         if data.format.lower() in ["jpeg", "jpg"]:
-            content_type = "image/jpeg"
+            encode_params = [cv2.IMWRITE_JPEG_QUALITY, quality]
+            ext = '.jpg'
         elif data.format.lower() == "png":
-            content_type = "image/png"
+            encode_params = [cv2.IMWRITE_PNG_COMPRESSION, min(9, quality // 10)]
+            ext = '.png'
         elif data.format.lower() == "webp":
-            content_type = "image/webp"
-            
-        # Get the bytes
-        img_bytes = encoded_img.tobytes()
+            encode_params = [cv2.IMWRITE_WEBP_QUALITY, quality]
+            ext = '.webp'
+        elif data.format.lower() in ["tif", "tiff"]:
+            ext = '.tiff'
+            with io.BytesIO() as tiff_buffer:
+                tifffile.imwrite(tiff_buffer, image_array, compress=1)
+                tiff_buffer.seek(0)
+                img_bytes = tiff_buffer.getvalue()
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported format. Use 'jpeg', 'png', 'webp', or 'tiff'.")
         
-        # Calculate stats
+        if data.format.lower() not in ["tiff", "tif"]:
+            _, encoded_img = cv2.imencode(ext, image_array, encode_params)
+            img_bytes = encoded_img.tobytes()
+        
+        # Compute compression statistics
         compressed_size = len(img_bytes)
         compression_ratio = original_size / compressed_size if compressed_size > 0 else 0
         reduction_percent = (1 - compressed_size / original_size) * 100 if original_size > 0 else 0
         
-        # Include compression statistics in headers
         headers = {
             "X-Original-Size": str(original_size),
             "X-Compressed-Size": str(compressed_size),
@@ -124,11 +92,9 @@ async def compress_image(data: ImageData):
             "X-Quality-Used": str(quality)
         }
         
-        return Response(content=img_bytes, media_type=content_type, headers=headers)
-        
+        return Response(content=img_bytes, media_type=f"image/{data.format}", headers=headers)
+    
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
 
 @app.get("/")
