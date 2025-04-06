@@ -1,97 +1,131 @@
 import os
-import io
 import dropbox
-from PIL import Image, TiffImagePlugin
-from rawpy import imread as raw_imread
-from datetime import datetime
-from PIL.PngImagePlugin import PngInfo
+from PIL import Image
+import rawpy
+import piexif
 
-DROPBOX_ACCESS_TOKEN = "sl.u.AFoFV5KFkADbq39PdbhBUTmgB9SbvX6Qz5EwkxjBkkXPZgzr2OGoX_poTe5tfP18FVDYwWQqLVbhRFRERNjC_Ldl3hys-SRB2V4eZMUs_WzfDs3RnMGsFXOMXXd-DA-m3F4oGrqF77stzZSiKQ10NwpZoFZbZHhE99R0D2h_SJwwO5X5PGrFJYMZAitWnxRJcKCoIjU0rtwrdQIrGdn6KF_lPo2C_TG7gvbItfwXDTPfJso7iWymeAZkgxsYf4TGhW1xAEMlgstqysx-Z-H27v60_sk00ELJPCDEIHeidCkWQnw1wWFk4D0cNCYftulVMH0ytoWc4Plvwlr3a52fEKtvI8n9f62HCq_sTCG_bECCdXJI0hhGQuVahfGekqSPVLo5FifG9BCjjss2W0dlYdgLHMIH2KpIRqZSUy0HKgDEuyqD-GgNBrTIeKEuNH0TTklGoNEAmlU5isi0i3rQpLD7zOorXXU80hUbjA3ou8caX7dEDdQo-1labwX5T-P-Lz8ExGgxb4p2pHVWU7eDE43N-vAmB2rVxibFvSxJLGFKfeBZAkUh9Rr-1p7AXprWaDc6egDxl_wInPL7pp8xdEEGINDmv0pkR7Il_r4iCwjm_E1tH2zTY__-Xoh1Hqram26_VsfOcbOTFl6aTriB22rSyN3NSvnBIolIwFKcQ28RCRaGDN6pdwjrwYWGX7zenx8elX8Sr3lynQnun-44y9d1tn3EM3hsrCTn-qtwMBfAh_eEld6yOJJcIGG3sgxd5wAUjDzkFoq08hxbIt_jpEnGOQfxxpKyHZrN_ZMAanc8FRGIkSlfsRVgMJCYwsdrB6AW5_Qo97c8le_BRcbIns7ZZvtVvXriSgZw1Y8A00k5d-C-4bAFFBrWil3BnZuhNej0ksb_XvdIE1fSpcyoBEusdX9MmONEXEsYptk7hvHMqiew_NRfgrDw0FNKEVCHWVzZnKqjlJdoM1K_o2MgHzr3K6B3rN4WqhfoOanVDPzTuecHr2_9kXXdwr8-C2iELOcaVIXQWh4tTnDcJdMrhbgZ1mncukSxGeg-zOIWlwI88VCRUiGC08ASaCIzeRKUYRezVjhwtKRoIdIrY0DO2ll7ei1Y6kXNH_OmN4Fjumz0A9A6GOwQwpHjOHvPCbtnizhOY44mP-Bv8oiNEd5ODcFU3YJE3JYhTKbvPrk_kzPyPDV5CbG0rVEMwMNBssUhC-V1ot7ORfMtY4J61noXyP3AMyizHFqcgl0eRSqjv6By7ky6DHGxh_GXgUwdoWBOsEjMSRCQQ7Onj7PEWLJkwBZ8oPAF3fiFsNm64XLk-p1cQIL36ZoZ5opmCcNeBkgyS9XAjvnFUwPV13M9YptRd6A6VCKrRsRuSLxZs-Au_Zc0fGFyIC1hu6JkCVlusKaV4vh9TAofGcsEWsOGfnTQgOop"
-DROPBOX_FOLDER = ''  # Change this to your folder path
-LOCAL_DOWNLOAD_FOLDER = 'downloads'
-LOCAL_COMPRESSED_FOLDER = 'compressed_images'
+# =========🔐 Dropbox Access Token =========
+ACCESS_TOKEN = "sl.u.AFpgcabLcSbH_VQ7yzwB50C6S2iklNnKJd2MjOmfjFb4qGAWg4m5f_C-JIoTCwZnbVrfBx_roqDTwfWEl67NTCdGgabP1Azgovsr5aJs3C1znlioFwjCcZsaSYkA5907sIt9Y_VRz2LgtpUK-6IR_wYllzdwbKpHS3-QvZRyMzBUy_yWPEgVdI7qYtrwjm_8kVNuMkyi1VK4wg40H3FaEgXe4lS91qD0601ijLgBL38m7tVZrH3FQJQ912lVJEhE-WKykK5Jl6O3CL3U194s6L7NO8P_FK0XNYbIp765IHzv4V9U4aOXfQH1Eu1c-fTST-c2G1cMM_p9evjqDYXnAsFUdU8FpgKmhzBddcMqEhxXU6v_4Z7omIH-S9utqbwNWkrF53UmMK5e59XOQruaWJfGdR6KvO4B8c2Vb-snrI-QERbQKxOL7n2TcdogLMpwAWI3ti6xKIf4eZi1B9I060tN4ocvKwUIGZalYmx01VwdwV6hk6wu2C61GouMTVcPsvmapZs9agpmEoECdqo3FwPW7pBMPsJzepiQPaN8nkQaFv6eTJhvP7uXioX1fw2O1JmZO_m9pNHoK9OptQ50z6HZoogYyDu21NZSFEC7jZ4CCSZSS94yTumKcmbH1WBJew-PkqpvaVs7O8pigHSja1_e_r1j5GmB5Z7xi2wgcBfnFlg1VHF4depklc3i1F9YmRIbXmqAwEmbZw74htEoKgjGKQvrHyaVTB9JdryJ2abjY1-Dy5JDzpOb1rWKd_IMOdkpBvtB_XIOWh5ZPf7Ad9KgrudOF8F0Q2L5E6F3Sh9HhXZRPEl8CHJXBcnGPO6Je9QQgV8b4tJSUM-TkAOJDHSgSAPXvxIyp3oR-bEqFZB8SWysjNS8TtrQL9l1ntO0Cwe7wk9y2sWFStMx-DDrTH4B7LeLTH1ynRB1K_E78vhYyEzymnSbptBlkFDWZdkMa621qNhgufH3j7ZhBCstcqCLtjCMGo_GN1EtEE47J7-JxSE8Ywr3ugwhXQ6wKqib892yR4AIobnKDm890gMBmGeMyX4TeHiAJdAnRslTO_Gp1jjD24XsFGD_HdAJQDDDnq5aZiNIRQUSJFZ5E5p8QkeQNkeyeOIxUqAsQiLaz4kJzrmNHK2AJhY9fb0ofttnbTVtE49gk2ay5leoQwI_3k2z4-d5CvpXTC16PLXTS6yhL5E2VEN9d6-joboHmKcIqhlQXedvaEVanhLQTod-E-HndHRlgULz09XKKFF8RudCczj0V6D7Oksn4rI4kDu4H6vgGShmSp_0e8HBO2k2rIaCZqcIitOnhRJQEvBN-RMPIPEzKEUJ8mSNRvk5FEfrkT5u1pWDX4eVekR2A1kS1GDYSuAjRTEIkMLOw1R8FN2aHF-yY-qX78XQUNrSI39LdfBj2sDib_D2Uj681U0GwvOX "# <- Replace this
+dbx = dropbox.Dropbox(ACCESS_TOKEN)
 
-SUPPORTED_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp', '.tiff', '.tif', '.raw', '.nef', '.cr2', '.arw', '.dng')
+# =========🔧 Settings =========
+DEFAULT_QUALITY = 10  # JPEG quality (0–100)
+NUM_LATEST_FILES = 10  # How many recent files to process
+DOWNLOAD_FOLDER = "downloads"
+COMPRESSED_FOLDER = "compressed_images"
 
-os.makedirs(LOCAL_DOWNLOAD_FOLDER, exist_ok=True)
-os.makedirs(LOCAL_COMPRESSED_FOLDER, exist_ok=True)
+os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+os.makedirs(COMPRESSED_FOLDER, exist_ok=True)
 
-dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+# =========📁 Get Files from Dropbox =========
+def get_latest_files(folder_path="", limit=NUM_LATEST_FILES):
+    try:
+        entries = dbx.files_list_folder(folder_path).entries
+        files = [f for f in entries if isinstance(f, dropbox.files.FileMetadata)]
+        files.sort(key=lambda x: x.server_modified, reverse=True)
+        return files[:limit]
+    except Exception as e:
+        print(f"❌ Error fetching files: {e}")
+        return []
 
-def get_latest_files(folder_path):
-    entries = dbx.files_list_folder(folder_path).entries
-    files = [f for f in entries if isinstance(f, dropbox.files.FileMetadata) and f.name.lower().endswith(SUPPORTED_EXTENSIONS)]
-    files.sort(key=lambda f: f.server_modified, reverse=True)
-    return files[:5]  # Change if you want more
-
+# =========🔗 Get/Generate Shared Link =========
 def get_shared_link(path):
     try:
-        metadata = dbx.sharing_create_shared_link_with_settings(path)
-        return metadata.url.replace('?dl=0', '?raw=1')
-    except dropbox.exceptions.ApiError as e:
-        if e.error.is_shared_link_already_exists():
-            links = dbx.sharing_list_shared_links(path=path, direct_only=True).links
-            if links:
-                return links[0].url.replace('?dl=0', '?raw=1')
-        raise e
+        links = dbx.sharing_list_shared_links(path=path).links
+        if links:
+            return links[0].url
+        shared_link_metadata = dbx.sharing_create_shared_link_with_settings(path)
+        return shared_link_metadata.url
+    except Exception as e:
+        print(f"❌ Error generating shared link for {path}: {e}")
+        return ""
 
-def compress_image(file_path, output_path, metadata_url):
-    ext = os.path.splitext(file_path)[1].lower()
-    original_size = os.path.getsize(file_path)
+# =========🗜️ Compress and Embed URL =========
+def compress_image(input_path, output_path, metadata_url, quality=DEFAULT_QUALITY):
+    ext = os.path.splitext(input_path)[1].lower()
 
-    if ext in ['.raw', '.nef', '.cr2', '.arw', '.dng']:
-        with open(file_path, 'rb') as f:
-            raw = raw_imread(f)
-            img = Image.fromarray(raw.postprocess())
-    else:
-        img = Image.open(file_path)
+    try:
+        # Handle RAW formats
+        if ext in [".cr2", ".nef", ".arw", ".dng", ".raw", ".cr3"]:
+            try:
+                with rawpy.imread(input_path) as raw:
+                    rgb = raw.postprocess()
+                    img = Image.fromarray(rgb)
+                    ext = ".jpg"
+                    output_path = os.path.splitext(output_path)[0] + ".jpg"
+            except Exception as e:
+                print(f"❌ Error reading RAW file {input_path}: {e}")
+                return None
+        else:
+            img = Image.open(input_path).convert("RGB")
 
-    # Prepare metadata
-    meta = PngInfo()
-    meta.add_text("Source URL", metadata_url)
+        # Prepare EXIF with embedded URL
+        exif_dict = {"0th": {piexif.ImageIFD.ImageDescription: metadata_url.encode("utf-8")}}
+        exif_bytes = piexif.dump(exif_dict)
 
-    if ext in ['.tiff', '.tif']:
-        # Embed metadata for TIFF
-        tiff_info = TiffImagePlugin.ImageFileDirectory_v2()
-        tiff_info[270] = f"Source URL: {metadata_url}"  # Tag 270 is ImageDescription
-        img.save(output_path, format='TIFF', tiffinfo=tiff_info)
-    elif ext in ['.png']:
-        img.save(output_path, format='PNG', optimize=True, pnginfo=meta)
-    elif ext in ['.jpg', '.jpeg', '.webp']:
-        img.save(output_path, format=img.format, quality=85, optimize=True)
-    else:
-        # Save RAW as TIFF with metadata
-        output_path = output_path.replace(ext, ".tiff")
-        tiff_info = TiffImagePlugin.ImageFileDirectory_v2()
-        tiff_info[270] = f"Source URL: {metadata_url}"
-        img.save(output_path, format='TIFF', tiffinfo=tiff_info)
+        # Save as JPEG with EXIF metadata
+        img.save(output_path, format="JPEG", quality=quality, optimize=True, exif=exif_bytes)
 
-    compressed_size = os.path.getsize(output_path)
-    ratio = round(compressed_size / original_size, 3)
+        original_size = os.path.getsize(input_path)
+        compressed_size = os.path.getsize(output_path)
+        ratio = round(compressed_size / original_size, 3)
 
-    print(f"\n🖼️  File: {os.path.basename(file_path)}")
-    print(f"📦 Original Size: {original_size} bytes")
-    print(f"🗜️  Compressed Size: {compressed_size} bytes")
-    print(f"📉 Compression Ratio: {ratio}")
-    print(f"🔗 Embedded URL: {metadata_url}\n")
+        print(f"\n🖼️ File: {os.path.basename(input_path)}")
+        print(f"📦 Original Size: {original_size} bytes")
+        print(f"🗜️ Compressed Size: {compressed_size} bytes")
+        print(f"📉 Compression Ratio: {ratio}")
+        print(f"🔗 Embedded URL: {metadata_url}")
 
+        return output_path
+
+    except Exception as e:
+        print(f"❌ Compression error: {e}")
+        return None
+
+# =========🔍 Extract Embedded URL =========
+def extract_url_from_jpeg(jpeg_path):
+    try:
+        exif_dict = piexif.load(jpeg_path)
+        image_description = exif_dict['0th'].get(piexif.ImageIFD.ImageDescription)
+
+        if image_description:
+            url = image_description.decode('utf-8', errors='ignore')
+            print(f"🔍 Extracted URL from {jpeg_path}: {url}")
+            return url
+        else:
+            print(f"ℹ️ No URL found in EXIF of {jpeg_path}")
+            return None
+    except Exception as e:
+        print(f"❌ Error reading EXIF from {jpeg_path}: {e}")
+        return None
+
+# =========🚀 Main Process =========
 def download_and_compress():
-    files = get_latest_files(DROPBOX_FOLDER)
-    if not files:
-        print("No supported image files found.")
-        return
+    files = get_latest_files(limit=NUM_LATEST_FILES)
 
     for file in files:
-        dropbox_path = file.path_lower
-        local_path = os.path.join(LOCAL_DOWNLOAD_FOLDER, file.name)
-        compressed_path = os.path.join(LOCAL_COMPRESSED_FOLDER, file.name)
+        try:
+            path = file.path_lower
+            name = file.name
+            local_path = os.path.join(DOWNLOAD_FOLDER, name)
+            compressed_path = os.path.join(COMPRESSED_FOLDER, name)
 
-        with open(local_path, "wb") as f:
-            metadata, res = dbx.files_download(path=dropbox_path)
-            f.write(res.content)
+            # Download from Dropbox
+            dbx.files_download_to_file(local_path, path)
 
-        url = get_shared_link(dropbox_path)
-        compress_image(local_path, compressed_path, url)
+            # Get Dropbox shared URL
+            url = get_shared_link(path)
 
+            # Compress image and embed URL
+            final_compressed_path = compress_image(local_path, compressed_path, url)
+
+            # Extract and verify embedded URL
+            if final_compressed_path and final_compressed_path.lower().endswith((".jpg", ".jpeg")):
+                extract_url_from_jpeg(final_compressed_path)
+
+        except Exception as e:
+            print(f"❌ Error in download_and_compress: {e}")
+
+# =========🔧 Run =========
 if __name__ == "__main__":
     download_and_compress()
